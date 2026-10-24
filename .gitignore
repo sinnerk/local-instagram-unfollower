@@ -1,0 +1,11 @@
+# Local IG Unfollower - local files
+*.pyc
+__pycache__/
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+report/
+*.html
+*_not_following_back.txt
+*_accounts.csv
