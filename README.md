@@ -6,7 +6,7 @@ A dead-simple, local app that shows who does **not** follow you back on Instagra
 
 It reads the official **JSON data export** from Instagram. It does not log in, scrape the website, unfollow anyone automatically, or upload your data anywhere.
 
-## Quick start (Windows)
+## The easy way (Windows, no Python)
 
 ### 1. Get your Instagram export
 
@@ -17,21 +17,30 @@ It reads the official **JSON data export** from Instagram. It does not log in, s
 5. Choose **JSON** as the format.
 6. Download the ZIP when Instagram says it is ready.
 
-### 2. Download this project
+### 2. Download the app
 
-Click **Code -> Download ZIP** on GitHub, then extract the folder somewhere easy, like your Desktop.
+Open **[Releases](https://github.com/sinnerk/local-instagram-unfollower/releases/latest)** and download **`Local-Instagram-Unfollower.exe`**. Put it anywhere you like, for example your Desktop.
 
 ### 3. Run it
 
-Double-click **`START_HERE.bat`**.
+Double-click the EXE. No installation, no Python, no account access.
 
 1. Click **AUTO-FIND MY EXPORT** (it checks Downloads, Desktop and Documents), or pick the ZIP yourself.
 2. Click **STEP 3 GENERATE REPORT**.
 3. The report opens in your browser.
 
-No terminal, no commands, no Instagram password.
+> **Windows may show a SmartScreen warning** because the app is not code-signed. Click **More info -> Run anyway**. The full source is in this repository, so you can inspect or build it yourself.
 
-> **Python 3.9 or newer is required.** If the app does not open, install Python from [python.org](https://www.python.org/downloads/) and tick **"Add python.exe to PATH"** during setup. Then try `START_HERE.bat` again.
+You can also drag your export ZIP directly onto the EXE.
+
+## Run from source (Windows, macOS, Linux)
+
+Prefer to run the Python source? Download the repo, then:
+
+- **Windows:** double-click **`START_HERE.bat`**.
+- **macOS / Linux:** run `python3 gui.py`.
+
+> **Python 3.9 or newer is required**, with Tkinter. On Windows, install Python from [python.org](https://www.python.org/downloads/) and tick **"Add python.exe to PATH"**. On Debian/Ubuntu: `sudo apt install python3-tk`.
 
 You can also drag your export ZIP directly onto `START_HERE.bat`.
 
@@ -53,14 +62,14 @@ This project contains **no Instagram account data**:
 
 - No export ZIPs, follower lists, usernames from a real account, credentials or local user paths are committed.
 - All names in the tests and screenshots are made up.
-- Generated reports stay in the local `report/` folder and are excluded by `.gitignore`.
+- Generated reports stay in a local `report/` folder next to the app (or in `Documents\Local Instagram Unfollower`) and are excluded by `.gitignore`.
 - The app has no analytics, no telemetry, and makes no network requests. The only network activity happens when **you** click a profile link or the Accounts Center help link.
 
 The repository only contains the source code, fake test data and documentation.
 
 ## Where the files go
 
-After generating a report, you will find:
+After generating a report, you will find a `report` folder next to the app:
 
 ```text
 report/
@@ -68,6 +77,8 @@ report/
   instagram_unfollowers_not_following_back.txt
   instagram_unfollowers_accounts.csv
 ```
+
+If that location is read-only, the app uses `Documents\Local Instagram Unfollower\report` instead. The success dialog shows the exact folder.
 
 These files contain your private follower data. Keep them local and do not commit or upload them.
 
@@ -87,24 +98,13 @@ Useful options:
 --version     Show the version
 ```
 
-## macOS / Linux
-
-The GUI works with Python 3.9+ and Tkinter:
-
-```bash
-python3 gui.py
-```
-
-On some Linux distributions, install Tkinter first:
-
-```bash
-sudo apt install python3-tk
-```
-
 ## Troubleshooting
 
+**Windows says "Windows protected your PC"**  
+The EXE is unsigned. Click **More info -> Run anyway**. You can also run the source with `START_HERE.bat`.
+
 **`START_HERE.bat` closes immediately**  
-Python is probably not installed or is not on `PATH`. Install Python 3.9+ and tick **"Add python.exe to PATH"**.
+Python is probably not installed or is not on `PATH`. Install Python 3.9+ and tick **"Add python.exe to PATH"**. Or use the standalone EXE from Releases.
 
 **Auto-find says no export was found**  
 Click **Pick ZIP file** and choose the ZIP manually. Make sure it is the Instagram export, not the email attachment or an unrelated ZIP.
@@ -127,6 +127,19 @@ python -m unittest discover -s tests -v
 ```
 
 The parser supports Instagram's current export format, split follower/following files, ZIP or extracted-folder input, URL-only records, and case-insensitive username matching.
+
+### Build the standalone EXE
+
+```powershell
+uvx pyinstaller --noconfirm --clean --onefile --windowed `
+  --name "Local-Instagram-Unfollower" `
+  --icon "assets/icon.ico" `
+  --add-data "assets/icon.ico;assets" `
+  --version-file "packaging/version_info.txt" `
+  gui.py
+```
+
+The result is `dist/Local-Instagram-Unfollower.exe`.
 
 ## License
 

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Simple desktop app for Local Instagram Unfollower.
 
-Double-click START_HERE.bat, choose an Instagram JSON export, and generate the
-local dashboard. No terminal commands, no Instagram login, no uploads.
+Double-click the standalone EXE (or START_HERE.bat), choose an Instagram JSON
+export, and generate the local dashboard. No terminal commands, no Instagram
+login, no uploads.
 """
 
 from __future__ import annotations
@@ -24,6 +25,28 @@ sys.path.insert(0, str(APP_DIR))
 
 import ig_audit
 
+
+def _resource_path(relative: str) -> Path:
+    """Find bundled files both in source runs and in the PyInstaller EXE."""
+    base = Path(getattr(sys, "_MEIPASS", APP_DIR))
+    return base / relative
+
+
+def _report_dir() -> Path:
+    """Prefer a report folder next to the app, fall back to Documents."""
+    preferred = APP_DIR / "report"
+    try:
+        preferred.mkdir(parents=True, exist_ok=True)
+        probe = preferred / ".write-test"
+        probe.write_text("", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return preferred
+    except OSError:
+        fallback = Path.home() / "Documents" / "Local Instagram Unfollower"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
+
+
 BG = "#0f0f13"
 CARD = "#17171f"
 CARD_2 = "#20202a"
@@ -44,6 +67,13 @@ class App:
         self.root.title("Local Instagram Unfollower")
         self.root.configure(bg=BG)
         self.root.resizable(True, True)
+
+        icon = _resource_path("assets/icon.ico")
+        if icon.exists():
+            try:
+                self.root.iconbitmap(default=str(icon))
+            except tk.TclError:
+                pass
 
         self.selected_path: Path | None = None
         self._worker_events: queue.Queue = queue.Queue()
@@ -481,8 +511,7 @@ class App:
 
         def worker() -> None:
             try:
-                report_dir = APP_DIR / "report"
-                report_dir.mkdir(parents=True, exist_ok=True)
+                report_dir = _report_dir()
                 out_path = report_dir / "instagram_unfollowers.html"
                 payload = ig_audit.build_payload(export_path)
                 ig_audit.write_report(out_path, payload)
@@ -500,6 +529,7 @@ class App:
                     f"Following: {counts['following']:,}\n"
                     f"Followers: {counts['followers']:,}\n"
                     f"Not following back: {counts['notFollowingBack']:,}\n\n"
+                    f"Saved in: {report_dir}\n\n"
                     "Opening it in your browser now."
                 )
                 self._worker_events.put(("success", message, out_path))

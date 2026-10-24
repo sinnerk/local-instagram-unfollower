@@ -18,3 +18,8 @@ connections/
 followers_*.json
 following*.json
 
+# Packaging output
+build/
+dist/
+*.spec
+
