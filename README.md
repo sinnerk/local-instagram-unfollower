@@ -2,7 +2,7 @@
 
 ![Local Instagram Unfollower desktop app](docs/gui.png)
 
-A dead-simple, local app that shows who does **not** follow you back on Instagram.
+A dead-simple, local app that shows who does **not** follow you back on Instagram. Free and open source (MIT).
 
 It reads the official **JSON data export** from Instagram. It does not log in, scrape the website, unfollow anyone automatically, or upload your data anywhere.
 
@@ -32,6 +32,22 @@ Double-click the EXE. No installation, no Python, no account access.
 > **Windows may show a SmartScreen warning** because the app is not code-signed. Click **More info -> Run anyway**. The full source is in this repository, so you can inspect or build it yourself.
 
 You can also drag your export ZIP directly onto the EXE.
+
+### Why does Windows warn about the EXE?
+
+The EXE is **unsigned**. It has no Authenticode certificate, so Windows cannot verify a publisher. On first launch, SmartScreen may show **"Windows protected your PC"** or the file may say **Unknown publisher**. That is expected for an unsigned app; it is not a virus warning.
+
+Code-signing certificates cost money and require identity verification, so small open-source projects usually ship unsigned builds. You do not have to trust the binary blindly:
+
+- Every line of source is in this repository under the MIT license.
+- You can run the Python source instead of the EXE.
+- You can verify the download against the SHA-256 published in the [release notes](https://github.com/sinnerk/local-instagram-unfollower/releases/latest):
+
+```powershell
+Get-FileHash .\Local-Instagram-Unfollower.exe -Algorithm SHA256
+```
+
+To run the EXE anyway: click **More info -> Run anyway**.
 
 ## Run from source (Windows, macOS, Linux)
 
@@ -101,7 +117,7 @@ Useful options:
 ## Troubleshooting
 
 **Windows says "Windows protected your PC"**  
-The EXE is unsigned. Click **More info -> Run anyway**. You can also run the source with `START_HERE.bat`.
+The EXE is unsigned, so SmartScreen cannot verify a publisher. Click **More info -> Run anyway**, verify the SHA-256, or run the source with `START_HERE.bat`. See [Why does Windows warn about the EXE?](#why-does-windows-warn-about-the-exe).
 
 **`START_HERE.bat` closes immediately**  
 Python is probably not installed or is not on `PATH`. Install Python 3.9+ and tick **"Add python.exe to PATH"**. Or use the standalone EXE from Releases.
@@ -140,6 +156,10 @@ uvx pyinstaller --noconfirm --clean --onefile --windowed `
 ```
 
 The result is `dist/Local-Instagram-Unfollower.exe`.
+
+## Open source
+
+This project is **MIT licensed**. Read the code, fork it, or build your own EXE. Issues and pull requests are welcome at [github.com/sinnerk/local-instagram-unfollower](https://github.com/sinnerk/local-instagram-unfollower).
 
 ## License
 
