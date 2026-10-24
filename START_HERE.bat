@@ -1,9 +1,23 @@
 @echo off
-title Local Instagram Unfollower
+setlocal
 cd /d "%~dp0"
-python gui.py
+
+where pythonw >nul 2>nul
+if not errorlevel 1 (
+    start "" pythonw "%~dp0gui.py" %*
+    exit /b 0
+)
+
+where pyw >nul 2>nul
+if not errorlevel 1 (
+    start "" pyw "%~dp0gui.py" %*
+    exit /b 0
+)
+
+python "%~dp0gui.py" %*
 if errorlevel 1 (
     echo.
-    echo Something went wrong. Make sure Python is installed.
+    echo Python was not found. Install Python 3.9 or newer from python.org
+    echo and tick "Add Python to PATH" during setup.
     pause
 )

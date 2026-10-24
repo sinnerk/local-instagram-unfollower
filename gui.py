@@ -1,382 +1,573 @@
 #!/usr/bin/env python3
-"""Super simple GUI for Local Instagram Unfollower"""
+"""Simple desktop app for Local Instagram Unfollower.
 
-import os
+Double-click START_HERE.bat, choose an Instagram JSON export, and generate the
+local dashboard. No terminal commands, no Instagram login, no uploads.
+"""
+
+from __future__ import annotations
+
+import queue
 import sys
 import threading
+import tkinter as tk
 import webbrowser
 from pathlib import Path
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox
 
-# Make sure we can import ig_audit from same folder
-SCRIPT_DIR = Path(__file__).parent.resolve()
-sys.path.insert(0, str(SCRIPT_DIR))
+APP_DIR = (
+    Path(sys.executable).parent.resolve()
+    if getattr(sys, "frozen", False)
+    else Path(__file__).parent.resolve()
+)
+sys.path.insert(0, str(APP_DIR))
 
 import ig_audit
 
+BG = "#0f0f13"
+CARD = "#17171f"
+CARD_2 = "#20202a"
+LINE = "#2b2b38"
+TEXT = "#f5f5f8"
+MUTED = "#9a9aac"
+MUTED_2 = "#6f6f82"
+PINK = "#d92d8f"
+PINK_HOVER = "#ec49a4"
+DISABLED = "#3a3a48"
+DISABLED_TEXT = "#777789"
+LINK = "#f3a8cc"
+
 
 class App:
-    def __init__(self, root):
+    def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("Local Instagram Unfollower - EASY MODE")
-        self.root.geometry("650x520")
-        self.root.resizable(False, False)
-        self.root.configure(bg="#0f0f13")
+        self.root.title("Local Instagram Unfollower")
+        self.root.configure(bg=BG)
+        self.root.resizable(True, True)
 
-        # Style
-        style = ttk.Style()
-        style.theme_use("clam")
-        style.configure("TFrame", background="#0f0f13")
-        style.configure(
-            "TLabel", background="#0f0f13", foreground="#f5f5f8", font=("Segoe UI", 9)
-        )
-        style.configure("Header.TLabel", font=("Segoe UI", 16, "bold"))
-        style.configure("Sub.TLabel", foreground="#9696a8")
-        style.configure("TButton", font=("Segoe UI", 10))
+        self.selected_path: Path | None = None
+        self._worker_events: queue.Queue = queue.Queue()
+        self._working = False
+        self._build_ui()
 
-        # Header
-        header_frame = ttk.Frame(root)
-        header_frame.pack(fill="x", padx=30, pady=(30, 10))
+        self.root.update_idletasks()
+        width = 700
+        height = max(640, self.root.winfo_reqheight() + 16)
+        x = max(0, (self.root.winfo_screenwidth() - width) // 2)
+        y = max(0, (self.root.winfo_screenheight() - height) // 3)
+        self.root.geometry(f"{width}x{height}+{x}+{y}")
+        self.root.minsize(660, 600)
 
-        ttk.Label(
-            header_frame, text="LOCAL INSTAGRAM UNFOLLOWER", style="Header.TLabel"
-        ).pack(anchor="w")
-        ttk.Label(
-            header_frame,
-            text="Find out who doesn't follow you back. 100% local. No login.",
-            style="Sub.TLabel",
-        ).pack(anchor="w", pady=(5, 0))
+        if len(sys.argv) > 1:
+            candidate = Path(sys.argv[1]).expanduser()
+            if candidate.exists():
+                self.select_path(candidate)
 
-        # Auto-detect section
-        detect_frame = tk.Frame(
-            root, bg="#15151c", highlightbackground="#282834", highlightthickness=1
-        )
-        detect_frame.pack(fill="x", padx=30, pady=20)
+    # ------------------------------------------------------------------
+    # UI
+    # ------------------------------------------------------------------
+
+    def _build_ui(self) -> None:
+        tk.Frame(self.root, bg=PINK, height=4).pack(fill="x")
+
+        header = tk.Frame(self.root, bg=BG)
+        header.pack(fill="x", padx=28, pady=(24, 18))
 
         tk.Label(
-            detect_frame,
-            text="STEP 1: FIND YOUR EXPORT",
-            bg="#15151c",
-            fg="#f5f5f8",
-            font=("Segoe UI", 11, "bold"),
-        ).pack(anchor="w", padx=20, pady=(15, 5))
-        tk.Label(
-            detect_frame,
-            text="We'll look in your Downloads and Desktop for instagram export ZIPs",
-            bg="#15151c",
-            fg="#9696a8",
-            font=("Segoe UI", 9),
-        ).pack(anchor="w", padx=20)
-
-        self.detect_btn = tk.Button(
-            detect_frame,
-            text="🔍 AUTO-FIND EXPORT",
-            command=self.auto_find,
-            bg="#d92d8f",
-            fg="white",
-            font=("Segoe UI", 10, "bold"),
-            relief="flat",
-            padx=20,
-            pady=10,
-            cursor="hand2",
-        )
-        self.detect_btn.pack(anchor="w", padx=20, pady=(10, 15))
-
-        # Manual pick section
-        pick_frame = tk.Frame(
-            root, bg="#15151c", highlightbackground="#282834", highlightthickness=1
-        )
-        pick_frame.pack(fill="x", padx=30, pady=(0, 20))
-
-        tk.Label(
-            pick_frame,
-            text="STEP 2: OR PICK IT YOURSELF",
-            bg="#15151c",
-            fg="#f5f5f8",
-            font=("Segoe UI", 11, "bold"),
-        ).pack(anchor="w", padx=20, pady=(15, 5))
-        tk.Label(
-            pick_frame,
-            text="Pick the .ZIP file you downloaded from Instagram",
-            bg="#15151c",
-            fg="#9696a8",
-            font=("Segoe UI", 9),
-        ).pack(anchor="w", padx=20)
-
-        btn_frame = tk.Frame(pick_frame, bg="#15151c")
-        btn_frame.pack(anchor="w", padx=20, pady=(10, 15))
-
-        self.pick_zip_btn = tk.Button(
-            btn_frame,
-            text="📁 Pick ZIP File",
-            command=self.pick_zip,
-            bg="#242430",
-            fg="#f5f5f8",
-            font=("Segoe UI", 9),
-            relief="flat",
-            padx=15,
-            pady=8,
-            cursor="hand2",
-        )
-        self.pick_zip_btn.pack(side="left")
-
-        self.pick_folder_btn = tk.Button(
-            btn_frame,
-            text="📂 Pick Extracted Folder",
-            command=self.pick_folder,
-            bg="#242430",
-            fg="#f5f5f8",
-            font=("Segoe UI", 9),
-            relief="flat",
-            padx=15,
-            pady=8,
-            cursor="hand2",
-        )
-        self.pick_folder_btn.pack(side="left", padx=(10, 0))
-
-        # Selected file
-        self.selected_frame = tk.Frame(
-            root, bg="#15151c", highlightbackground="#282834", highlightthickness=1
-        )
-        self.selected_frame.pack(fill="x", padx=30, pady=(0, 20))
-
-        tk.Label(
-            self.selected_frame,
-            text="SELECTED:",
-            bg="#15151c",
-            fg="#9696a8",
+            header,
+            text="LOCAL / PRIVATE / READ-ONLY",
+            bg=BG,
+            fg=LINK,
             font=("Segoe UI", 8, "bold"),
-        ).pack(anchor="w", padx=20, pady=(15, 5))
-        self.selected_label = tk.Label(
-            self.selected_frame,
-            text="None",
-            bg="#15151c",
-            fg="#f5f5f8",
+        ).pack(anchor="w")
+
+        tk.Label(
+            header,
+            text="Local Instagram Unfollower",
+            bg=BG,
+            fg=TEXT,
+            font=("Segoe UI", 19, "bold"),
+        ).pack(anchor="w", pady=(4, 2))
+
+        tk.Label(
+            header,
+            text="See who doesn't follow you back. No login, no uploads, no terminal.",
+            bg=BG,
+            fg=MUTED,
             font=("Segoe UI", 9),
-            wraplength=580,
+        ).pack(anchor="w")
+
+        choose = self._card()
+        self._step_title(choose, "STEP 1   CHOOSE YOUR EXPORT")
+        tk.Label(
+            choose,
+            text="Auto-find looks in your Downloads, Desktop and Documents for an Instagram ZIP.",
+            bg=CARD,
+            fg=MUTED,
+            font=("Segoe UI", 9),
+            wraplength=590,
             justify="left",
+        ).pack(anchor="w", padx=18, pady=(4, 12))
+
+        self.detect_btn = self._primary_button(
+            choose, "AUTO-FIND MY EXPORT", self.auto_find
         )
-        self.selected_label.pack(anchor="w", padx=20)
+        self.detect_btn.pack(fill="x", padx=18)
+
+        button_row = tk.Frame(choose, bg=CARD)
+        button_row.pack(fill="x", padx=18, pady=(9, 0))
+
+        self.pick_zip_btn = self._secondary_button(
+            button_row, "Pick ZIP file", self.pick_zip
+        )
+        self.pick_zip_btn.pack(side="left", expand=True, fill="x")
+
+        self.pick_folder_btn = self._secondary_button(
+            button_row, "Pick extracted folder", self.pick_folder
+        )
+        self.pick_folder_btn.pack(side="left", expand=True, fill="x", padx=(9, 0))
+
+        self.help_btn = tk.Label(
+            choose,
+            text="How do I download my Instagram export?",
+            bg=CARD,
+            fg=LINK,
+            font=("Segoe UI", 8, "underline"),
+            cursor="hand2",
+        )
+        self.help_btn.pack(anchor="w", padx=18, pady=(11, 15))
+        self.help_btn.bind("<Button-1>", lambda _event: self.show_help())
+
+        selected = self._card()
+        self._step_title(selected, "STEP 2   CHECK THE SELECTED EXPORT")
+
+        selected_row = tk.Frame(selected, bg=CARD)
+        selected_row.pack(fill="x", padx=18, pady=(5, 15))
+
+        self.selected_label = tk.Label(
+            selected_row,
+            text="No export selected yet.",
+            bg=CARD,
+            fg=MUTED,
+            font=("Segoe UI", 9),
+            wraplength=525,
+            justify="left",
+            anchor="w",
+        )
+        self.selected_label.pack(side="left", fill="x", expand=True)
 
         self.clear_btn = tk.Button(
-            self.selected_frame,
+            selected_row,
             text="Clear",
             command=self.clear_selection,
-            bg="#15151c",
-            fg="#9696a8",
-            font=("Segoe UI", 8),
+            bg=CARD,
+            fg=MUTED_2,
+            activebackground=CARD,
+            activeforeground=TEXT,
+            font=("Segoe UI", 8, "underline"),
             relief="flat",
-            cursor="hand2",
             borderwidth=0,
+            cursor="hand2",
         )
-        self.clear_btn.pack(anchor="w", padx=20, pady=(5, 15))
+        self.clear_btn.pack(side="right", padx=(10, 0))
         self.clear_btn.pack_forget()
 
-        # Generate button
         self.generate_btn = tk.Button(
-            root,
-            text="✨ GENERATE REPORT",
+            self.root,
+            text="STEP 3   GENERATE REPORT",
             command=self.generate_report,
-            bg="#3a3a48",
-            fg="#6e6e80",
-            font=("Segoe UI", 12, "bold"),
+            bg=DISABLED,
+            fg=DISABLED_TEXT,
+            activebackground=DISABLED,
+            activeforeground=DISABLED_TEXT,
+            disabledforeground=DISABLED_TEXT,
+            font=("Segoe UI", 11, "bold"),
             relief="flat",
-            padx=30,
-            pady=15,
+            padx=24,
+            pady=13,
             cursor="arrow",
             state="disabled",
         )
-        self.generate_btn.pack(pady=10)
+        self.generate_btn.pack(fill="x", padx=28, pady=(2, 8))
 
-        # Status
         self.status_label = tk.Label(
-            root, text="", bg="#0f0f13", fg="#9696a8", font=("Segoe UI", 9)
+            self.root,
+            text="",
+            bg=BG,
+            fg=MUTED,
+            font=("Segoe UI", 9),
         )
-        self.status_label.pack(pady=(5, 20))
+        self.status_label.pack(pady=(0, 6))
 
-        self.selected_path = None
+        tk.Label(
+            self.root,
+            text="Nothing is uploaded. Unfollowing is still manual.",
+            bg=BG,
+            fg=MUTED_2,
+            font=("Segoe UI", 8),
+        ).pack(pady=(0, 14))
 
-    def auto_find(self):
-        self.status_label.config(text="Searching...")
-        self.root.update()
+    def _card(self) -> tk.Frame:
+        frame = tk.Frame(
+            self.root,
+            bg=CARD,
+            highlightbackground=LINE,
+            highlightthickness=1,
+        )
+        frame.pack(fill="x", padx=28, pady=(0, 12))
+        return frame
 
-        search_paths = []
+    def _step_title(self, parent: tk.Frame, text: str) -> None:
+        tk.Label(
+            parent,
+            text=text,
+            bg=CARD,
+            fg=TEXT,
+            font=("Segoe UI", 10, "bold"),
+        ).pack(anchor="w", padx=18, pady=(14, 0))
+
+    def _primary_button(self, parent: tk.Widget, text: str, command) -> tk.Button:
+        return tk.Button(
+            parent,
+            text=text,
+            command=command,
+            bg=PINK,
+            fg="white",
+            activebackground=PINK_HOVER,
+            activeforeground="white",
+            font=("Segoe UI", 10, "bold"),
+            relief="flat",
+            padx=18,
+            pady=10,
+            cursor="hand2",
+        )
+
+    def _secondary_button(self, parent: tk.Widget, text: str, command) -> tk.Button:
+        return tk.Button(
+            parent,
+            text=text,
+            command=command,
+            bg=CARD_2,
+            fg=TEXT,
+            activebackground="#2b2b38",
+            activeforeground=TEXT,
+            font=("Segoe UI", 9),
+            relief="flat",
+            padx=14,
+            pady=8,
+            cursor="hand2",
+        )
+
+    # ------------------------------------------------------------------
+    # Actions
+    # ------------------------------------------------------------------
+
+    def show_help(self) -> None:
+        answer = messagebox.askyesno(
+            "Get your Instagram export",
+            "1. Open Instagram Accounts Center.\n"
+            "2. Go to 'Your information and permissions'.\n"
+            "3. Choose 'Download your information'.\n"
+            "4. Select 'Some of your information'.\n"
+            "5. Tick 'Followers and following' and choose JSON.\n"
+            "6. Download the ZIP when Instagram is ready.\n\n"
+            "Open Accounts Center now?",
+        )
+        if answer:
+            webbrowser.open("https://accountscenter.instagram.com/")
+
+    def auto_find(self) -> None:
+        self.status_label.config(text="Searching your folders...")
+        self.root.update_idletasks()
+
         home = Path.home()
-        search_paths.extend([home / "Downloads", home / "Desktop", home / "Documents"])
+        search_paths = [home / "Downloads", home / "Desktop", home / "Documents"]
 
-        found = []
-        for sp in search_paths:
-            if sp.exists():
-                for item in sp.glob("instagram*.zip"):
-                    found.append(item)
-                for item in sp.glob("*instagram*.zip"):
-                    if item not in found:
-                        found.append(item)
+        found: dict[str, Path] = {}
+        for folder in search_paths:
+            if not folder.exists():
+                continue
+            try:
+                for item in folder.glob("*.zip"):
+                    if "instagram" in item.name.lower():
+                        found[str(item.resolve())] = item
+            except OSError:
+                continue
 
-        if not found:
+        exports = sorted(
+            found.values(),
+            key=lambda path: path.stat().st_mtime if path.exists() else 0,
+            reverse=True,
+        )
+
+        if not exports:
             messagebox.showinfo(
-                "No exports found",
-                "Couldn't find any 'instagram*.zip' files in Downloads/Desktop/Documents.\n\nJust click 'Pick ZIP File' instead.",
+                "No export found",
+                "I couldn't find an Instagram ZIP in Downloads, Desktop or Documents.\n\n"
+                "Click 'Pick ZIP file' and choose it yourself.",
             )
             self.status_label.config(text="")
             return
 
-        # Sort by newest first
-        found.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+        if len(exports) == 1:
+            self.select_path(exports[0])
+            self.status_label.config(text=f"Found {exports[0].name}")
+            return
 
-        if len(found) == 1:
-            self.select_path(found[0])
-            self.status_label.config(text=f"Found: {found[0].name}")
-        else:
-            # Show choice
-            win = tk.Toplevel(self.root)
-            win.title("Pick your export")
-            win.geometry("500x300")
-            win.configure(bg="#0f0f13")
-            win.resizable(False, False)
-            win.grab_set()
+        self._show_export_choices(exports)
+
+    def _show_export_choices(self, exports: list[Path]) -> None:
+        visible = exports[:6]
+        window = tk.Toplevel(self.root)
+        window.title("Pick your export")
+        window.configure(bg=BG)
+        window.resizable(False, False)
+        window.transient(self.root)
+        window.grab_set()
+
+        width = 570
+        height = 120 + len(visible) * 72 + (30 if len(exports) > 6 else 0)
+        x = self.root.winfo_rootx() + (self.root.winfo_width() - width) // 2
+        y = self.root.winfo_rooty() + 60
+        window.geometry(f"{width}x{height}+{max(0, x)}+{max(0, y)}")
+
+        tk.Label(
+            window,
+            text="Which export should I use?",
+            bg=BG,
+            fg=TEXT,
+            font=("Segoe UI", 12, "bold"),
+        ).pack(anchor="w", padx=20, pady=(18, 2))
+        tk.Label(
+            window,
+            text="Newest first. Pick the ZIP you downloaded from Instagram.",
+            bg=BG,
+            fg=MUTED,
+            font=("Segoe UI", 8),
+        ).pack(anchor="w", padx=20, pady=(0, 12))
+
+        for path in visible:
+            row = tk.Frame(
+                window,
+                bg=CARD,
+                highlightbackground=LINE,
+                highlightthickness=1,
+            )
+            row.pack(fill="x", padx=20, pady=(0, 6))
+
+            info = tk.Frame(row, bg=CARD)
+            info.pack(side="left", fill="x", expand=True, padx=14, pady=9)
 
             tk.Label(
-                win,
-                text="Found multiple exports - pick yours:",
-                bg="#0f0f13",
-                fg="#f5f5f8",
-                font=("Segoe UI", 11, "bold"),
-            ).pack(anchor="w", padx=20, pady=(20, 10))
-
-            for f in found:
-                frame = tk.Frame(
-                    win,
-                    bg="#15151c",
-                    highlightbackground="#282834",
-                    highlightthickness=1,
-                )
-                frame.pack(fill="x", padx=20, pady=5)
-                tk.Label(
-                    frame, text=f.name, bg="#15151c", fg="#f5f5f8", font=("Segoe UI", 9)
-                ).pack(anchor="w", padx=15, pady=(10, 2))
-                tk.Label(
-                    frame,
-                    text=f.parent.name,
-                    bg="#15151c",
-                    fg="#9696a8",
-                    font=("Segoe UI", 8),
-                ).pack(anchor="w", padx=15, pady=(0, 10))
-                btn = tk.Button(
-                    frame,
-                    text="Select",
-                    command=lambda x=f, w=win: [self.select_path(x), w.destroy()],
-                    bg="#d92d8f",
-                    fg="white",
-                    font=("Segoe UI", 8),
-                    relief="flat",
-                    padx=12,
-                    pady=4,
-                )
-                btn.place(relx=0.98, rely=0.5, anchor="e")
+                info,
+                text=path.name,
+                bg=CARD,
+                fg=TEXT,
+                font=("Segoe UI", 9, "bold"),
+                anchor="w",
+                justify="left",
+                wraplength=390,
+            ).pack(anchor="w")
+            tk.Label(
+                info,
+                text=str(path.parent),
+                bg=CARD,
+                fg=MUTED_2,
+                font=("Segoe UI", 8),
+                anchor="w",
+                justify="left",
+                wraplength=390,
+            ).pack(anchor="w")
 
             tk.Button(
-                win,
-                text="Cancel",
-                command=win.destroy,
-                bg="#242430",
-                fg="#f5f5f8",
-                font=("Segoe UI", 9),
+                row,
+                text="Use this",
+                command=lambda chosen=path: self._choose_export(chosen, window),
+                bg=PINK,
+                fg="white",
+                activebackground=PINK_HOVER,
+                activeforeground="white",
+                font=("Segoe UI", 8, "bold"),
                 relief="flat",
-                padx=15,
-                pady=6,
-            ).pack(pady=15)
+                padx=12,
+                pady=5,
+                cursor="hand2",
+            ).pack(side="right", padx=12)
 
-    def pick_zip(self):
+        if len(exports) > 6:
+            tk.Label(
+                window,
+                text="Showing the 6 newest. Use 'Pick ZIP file' for an older export.",
+                bg=BG,
+                fg=MUTED_2,
+                font=("Segoe UI", 8),
+            ).pack(anchor="w", padx=20, pady=(2, 0))
+
+        tk.Button(
+            window,
+            text="Cancel",
+            command=window.destroy,
+            bg=CARD_2,
+            fg=TEXT,
+            activebackground="#2b2b38",
+            activeforeground=TEXT,
+            font=("Segoe UI", 9),
+            relief="flat",
+            padx=18,
+            pady=6,
+            cursor="hand2",
+        ).pack(pady=12)
+
+    def _choose_export(self, path: Path, window: tk.Toplevel) -> None:
+        self.select_path(path)
+        self.status_label.config(text=f"Selected {path.name}")
+        window.destroy()
+
+    def pick_zip(self) -> None:
         path = filedialog.askopenfilename(
             title="Select Instagram export ZIP",
             filetypes=[("ZIP files", "*.zip"), ("All files", "*.*")],
         )
         if path:
             self.select_path(Path(path))
+            self.status_label.config(text=f"Selected {Path(path).name}")
 
-    def pick_folder(self):
+    def pick_folder(self) -> None:
         path = filedialog.askdirectory(title="Select extracted Instagram export folder")
         if path:
             self.select_path(Path(path))
+            self.status_label.config(text=f"Selected {Path(path).name}")
 
-    def select_path(self, path):
+    def select_path(self, path: Path) -> None:
         self.selected_path = path
-        self.selected_label.config(text=str(path))
-        self.clear_btn.pack(anchor="w", padx=20, pady=(5, 15))
+        self.selected_label.config(text=str(path), fg=TEXT)
+        self.clear_btn.pack(side="right", padx=(10, 0))
         self.generate_btn.config(
-            state="normal", bg="#d92d8f", fg="white", cursor="hand2"
+            state="normal",
+            bg=PINK,
+            fg="white",
+            activebackground=PINK_HOVER,
+            activeforeground="white",
+            cursor="hand2",
         )
-        self.status_label.config(text="Ready to generate!")
+        self.status_label.config(text="Ready to generate.")
 
-    def clear_selection(self):
+    def clear_selection(self) -> None:
         self.selected_path = None
-        self.selected_label.config(text="None")
+        self.selected_label.config(text="No export selected yet.", fg=MUTED)
         self.clear_btn.pack_forget()
         self.generate_btn.config(
-            state="disabled", bg="#3a3a48", fg="#6e6e80", cursor="arrow"
+            state="disabled",
+            bg=DISABLED,
+            fg=DISABLED_TEXT,
+            activebackground=DISABLED,
+            activeforeground=DISABLED_TEXT,
+            cursor="arrow",
         )
         self.status_label.config(text="")
 
-    def generate_report(self):
+    def generate_report(self) -> None:
         if not self.selected_path:
             return
 
-        self.generate_btn.config(
-            state="disabled", text="⏳ GENERATING...", bg="#3a3a48"
+        self._set_busy(True)
+        self._working = True
+        self.status_label.config(
+            text="Reading your export... this can take a few seconds."
         )
-        self.detect_btn.config(state="disabled")
-        self.pick_zip_btn.config(state="disabled")
-        self.pick_folder_btn.config(state="disabled")
-        self.clear_btn.config(state="disabled")
-        self.status_label.config(text="Reading your export... this might take a second")
-        self.root.update()
+        self.root.update_idletasks()
 
-        def run():
+        export_path = self.selected_path
+
+        def worker() -> None:
             try:
-                out_path = SCRIPT_DIR / "instagram_unfollowers.html"
-                payload = ig_audit.build_payload(self.selected_path)
+                report_dir = APP_DIR / "report"
+                report_dir.mkdir(parents=True, exist_ok=True)
+                out_path = report_dir / "instagram_unfollowers.html"
+                payload = ig_audit.build_payload(export_path)
                 ig_audit.write_report(out_path, payload)
-                txt_path = SCRIPT_DIR / "instagram_unfollowers_not_following_back.txt"
-                csv_path = SCRIPT_DIR / "instagram_unfollowers_accounts.csv"
-                ig_audit.write_text_list(txt_path, payload["notFollowingBack"])
-                ig_audit.write_csv(csv_path, payload)
+                ig_audit.write_text_list(
+                    report_dir / "instagram_unfollowers_not_following_back.txt",
+                    payload["notFollowingBack"],
+                )
+                ig_audit.write_csv(
+                    report_dir / "instagram_unfollowers_accounts.csv", payload
+                )
 
                 counts = payload["counts"]
-                msg = f"Done!\n\nFollowing: {counts['following']:,}\nFollowers: {counts['followers']:,}\nNot following back: {counts['notFollowingBack']:,}\n\nOpening report in your browser..."
-
-                self.root.after(
-                    0,
-                    lambda: [
-                        messagebox.showinfo("Success!", msg),
-                        webbrowser.open(out_path.as_uri()),
-                        self.finish(),
-                    ],
+                message = (
+                    "Report generated.\n\n"
+                    f"Following: {counts['following']:,}\n"
+                    f"Followers: {counts['followers']:,}\n"
+                    f"Not following back: {counts['notFollowingBack']:,}\n\n"
+                    "Opening it in your browser now."
                 )
-            except Exception as e:
-                self.root.after(
-                    0, lambda: [messagebox.showerror("Error", str(e)), self.finish()]
-                )
+                self._worker_events.put(("success", message, out_path))
+            except Exception as error:
+                self._worker_events.put(("error", str(error), None))
 
-        threading.Thread(target=run, daemon=True).start()
+        threading.Thread(target=worker, daemon=True).start()
+        self.root.after(100, self._poll_worker)
 
-    def finish(self):
-        self.generate_btn.config(
-            state="normal",
-            text="✨ GENERATE REPORT",
-            bg="#d92d8f",
-            fg="white",
-            cursor="hand2",
+    def _poll_worker(self) -> None:
+        try:
+            kind, message, out_path = self._worker_events.get_nowait()
+        except queue.Empty:
+            if self._working:
+                self.root.after(100, self._poll_worker)
+            return
+
+        self._working = False
+        if kind == "success":
+            messagebox.showinfo("Done", message)
+            webbrowser.open(out_path.as_uri())
+            self._finish(True)
+        else:
+            messagebox.showerror(
+                "Could not read that export",
+                f"{message}\n\n"
+                "Make sure you downloaded Instagram's JSON export and "
+                "selected 'Followers and following'.",
+            )
+            self._finish(False)
+
+    def _set_busy(self, busy: bool) -> None:
+        state = "disabled" if busy else "normal"
+        self.detect_btn.config(state=state)
+        self.pick_zip_btn.config(state=state)
+        self.pick_folder_btn.config(state=state)
+        self.clear_btn.config(state=state)
+        if busy:
+            self.generate_btn.config(
+                state="disabled",
+                text="GENERATING REPORT...",
+                bg=DISABLED,
+                fg=DISABLED_TEXT,
+                cursor="arrow",
+            )
+        else:
+            self.generate_btn.config(
+                state="normal" if self.selected_path else "disabled",
+                text="STEP 3   GENERATE REPORT",
+                bg=PINK if self.selected_path else DISABLED,
+                fg="white" if self.selected_path else DISABLED_TEXT,
+                cursor="hand2" if self.selected_path else "arrow",
+            )
+
+    def _finish(self, success: bool) -> None:
+        self._set_busy(False)
+        self.status_label.config(
+            text="Report opened in your browser."
+            if success
+            else "Could not generate the report. Try another export."
         )
-        self.detect_btn.config(state="normal")
-        self.pick_zip_btn.config(state="normal")
-        self.pick_folder_btn.config(state="normal")
-        self.clear_btn.config(state="normal")
-        self.status_label.config(text="Report opened in browser!")
+
+
+def main() -> None:
+    root = tk.Tk()
+    App(root)
+    root.mainloop()
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = App(root)
-    root.mainloop()
+    main()

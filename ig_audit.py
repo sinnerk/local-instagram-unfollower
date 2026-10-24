@@ -16,9 +16,10 @@ import re
 import sys
 import webbrowser
 import zipfile
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 from urllib.parse import unquote, urlparse
 
 APP_NAME = "Local Instagram Unfollower"

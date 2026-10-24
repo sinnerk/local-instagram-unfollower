@@ -5,7 +5,16 @@ __pycache__/
 *.tmp
 .DS_Store
 Thumbs.db
+
+# Generated reports
 report/
 *.html
 *_not_following_back.txt
 *_accounts.csv
+
+# Private Instagram exports - never commit these
+*.zip
+connections/
+followers_*.json
+following*.json
+
